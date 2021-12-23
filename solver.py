@@ -3,7 +3,7 @@ from os.path import join as ospj
 import time
 import datetime
 from munch import Munch
-
+from torchvision.utils import save_image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,7 +12,7 @@ from model import build_model
 from checkpoint import CheckpointIO
 from dataset import InputFetcher
 import utils
-#from eval import calculate_metrics
+
 
 class Solver(nn.Module):
     def __init__(self,args,logger,loader):
@@ -153,7 +153,7 @@ class Solver(nn.Module):
 
         def train(self):
             
-            fetcher = InputFetcher(self.loaders.src, self.loaders.ref, self.args.latent_dim, 'train')
+            fetcher = InputFetcher(self.loaders.src, self.args.latent_dim, 'train')
             fetcher_val = InputFetcher(self.loaders.val, None, self.args.latent_dim, 'val')
             inputs_val = next(fetcher_val)
 
@@ -200,9 +200,6 @@ class Solver(nn.Module):
                 loss['style_loss']=self.style_loss.item()
                 
 
-
-
-
                 self.moving_average(self.nets.generator, self.nets_ema.generator, beta=0.999)
                 self.moving_average(self.nets.mapping_network, self.nets_ema.mapping_network, beta=0.999)
                 self.moving_average(self.nets.style_encoder, self.nets_ema.style_encoder, beta=0.999)
@@ -228,15 +225,34 @@ class Solver(nn.Module):
         
         @torch.no_grad
         def sample():
-            os.makedirs(args.result_dir, exist_ok=True)
+            os.makedirs(self.args.result_dir, exist_ok=True)
             self.loadcheckpoint(args.resume_iter)
-
-            src = next(InputFetcher(self.loaders.src, None, self.args.latent_dim, 'test'))
-            ref = next(InputFetcher(self.loaders.ref, None, self.args.latent_dim, 'test'))
-
-            fname = ospj(args.result_dir, 'reference.jpg')
-            print('Working on {}...'.format(fname))
-            utils.translate_using_reference(self.nets_ema, self.args, src.x, ref.x, ref.y, fname)
+            self.angles=['000','018','036','054','072','090','108','126','144','162','180']
+            self.states=['nm-01','nm-02','nm-03','nm-04','nm-05','nm-06','bg-01','bg-02','cl-01','cl-02']
+            for x_src_img,id,k,j,x_ref_img,y_ref, in enumerate(self.loaders.test):
+                x_src=x_src.to(self.device)
+                x_ref_img=x_ref_img.to(self.device)
+                y_ref=y_ref.to(self.device)
+                result=ospj(self.args.result_dir,self.angles[y_ref.item()])
+                if not(os.path.exists(result):
+                    os.makedirs(result)
+                id='%03d'% id.item()
+                result_id=ospj(result,id)
+                if not os.path.exists(result_id):
+                    os.mkdir(result_id)
+                cond=self.states[k.item()]
+                result_cond=ospj(result_id,cond)
+                if not os.path.exists(result_cond):
+                    os.mkdir(result_cond)
+                angle=self.angles[j.item()]
+                result_ang=ospj(result_cond,angle)
+                if not os.path.exists(result_ang):
+                    os.mkdir(result_ang)
+                fname=ospj(result_ang,id+'-'+cond+'-'+angle+'.png')
+                s_trg=self.nets_ema(x_ref_img,y_ref)
+                x_fake = self.nets_ema.generator(x_src_img, s_trg, masks=None)
+                img = utils.denorm(x_fake.data.cpu())
+            save_image(img,fname,nrow=1)
 
 
         
