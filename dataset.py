@@ -106,11 +106,11 @@ class CasiaTrain(data.Dataset):
             if not x_ref1[1]==x_ref2[1]:
                 continue
             break
-        x_src_label=torch.tensor(self.dataset[idx][2],dtype=torch.int32)
+        x_src_label=torch.tensor(self.dataset[idx][2],dtype=torch.long)
         x_ref1_img=Image.open(x_ref1[0]).convert('RGB')
         x_ref2_img=Image.open(x_ref2[0]).convert('RGB')
-        label=torch.tensor(x_ref1[1],dtype=torch.int32)
-        print(x_src_name,x_src_label,x_ref1[0],x_ref2[0],label)
+        label=torch.tensor(x_ref1[1],dtype=torch.long)
+        #print(x_src_name,x_src_label,x_ref1[0],x_ref2[0],label)
         x_ref1_img=self.transform(x_ref1_img)
         x_ref2_img=self.transform(x_ref2_img)
         return x_src_img,x_src_label,x_ref1_img,x_ref2_img,label
@@ -160,11 +160,11 @@ class CasiaVal(data.Dataset):
             if not x_ref1[1]==x_ref2[1]:
                 continue
             break
-        x_src_label=torch.tensor(self.dataset[idx][2],dtype=torch.int32)
+        x_src_label=torch.tensor(self.dataset[idx][2],dtype=torch.long)
         x_ref1_img=Image.open(x_ref1[0]).convert('RGB')
         x_ref2_img=Image.open(x_ref2[0]).convert('RGB')
-        label=torch.tensor(x_ref1[1],dtype=torch.int32)
-        print(x_src_name,x_src_label,x_ref1[0],x_ref2[0],label)
+        label=torch.tensor(x_ref1[1],dtype=torch.long)
+        #print(x_src_name,x_src_label,x_ref1[0],x_ref2[0],label)
         x_ref1_img=self.transform(x_ref1_img)
         x_ref2_img=self.transform(x_ref2_img)
         return x_src_img,x_src_label,x_ref1_img,x_ref2_img,label
@@ -207,8 +207,8 @@ class CasiaTest(data.Dataset):
         id=self.dataset[idx][1]
         img=Image.open(x_src_name).convert('RGB')
         x_src_img=self.transform(img)
-        x_src_cond=torch.tensor(self.dataset[idx][2],dtype=torch.int)
-        x_src_angle=torch.tensor(self.dataset[idx][3],dtype=torch.int)
+        x_src_cond=torch.tensor(self.dataset[idx][2],dtype=torch.long)
+        x_src_angle=torch.tensor(self.dataset[idx][3],dtype=torch.long)
         x_ref_name=self.dataset[idx][4]
         img=Image.open(x_ref_name).convert('RGB')
         x_ref_img=self.transform(img)
@@ -231,7 +231,7 @@ def get_val_loader(root,img_size,batch_size,num_workers,shuffle=True):
     dataset=CasiaVal(root,img_size)
     return data.DataLoader(dataset=dataset,batch_size=batch_size,shuffle=shuffle,num_workers=num_workers,pin_memory=True)
 
-def get_val_loader(root,img_size,batch_size,num_workers,shuffle=False):
+def get_test_loader(root,img_size,batch_size,num_workers,shuffle=False):
     print("Preparing Dataloader for Testing generation ")
     dataset=CasiaTest(root,img_size)
     return data.DataLoader(dataset=dataset,batch_size=batch_size,shuffle=shuffle,num_workers=num_workers,pin_memory=True)

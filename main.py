@@ -23,17 +23,13 @@ def main(args):
                                              img_size=args.img_size,
                                              batch_size=args.batch_size,
                                              num_workers=args.num_workers),
-                        ref=get_train_loader(root=args.train_img_dir,
-                                             img_size=args.img_size,
-                                             batch_size=args.batch_size,
-                                             num_workers=args.num_workers),
                         val=get_val_loader(root=args.val_img_dir,
                                             img_size=args.img_size,
                                             batch_size=args.val_batch_size,
                                             shuffle=True,
                                             num_workers=args.num_workers))
         solver = Solver(args,loaders)
-        solver.train()
+        solver.Train_network()
     elif args.mode == 'sample':
         loaders = Munch(test=get_test_loader(root=args.src_dir,
                                             img_size=args.img_size,
@@ -119,8 +115,7 @@ if __name__ == '__main__':
                         help='Directory for saving all the Logs')
 
     # directory for calculating metrics
-    parser.add_argument('--eval_dir', type=str, default='./eval',
-                        help='Directory for saving metrics, i.e., FID and LPIPS')
+
 
     # directory for testing
     parser.add_argument('--result_dir', type=str, default='expr/results',

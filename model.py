@@ -7,8 +7,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from wing import FAN
-
 
 class ResBlk(nn.Module):
     def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2),
@@ -266,15 +264,20 @@ class Discriminator(nn.Module):
         out = self.main(x)
         out = out.view(out.size(0), -1)  # (batch, num_domains)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
+        #print(out.size(),idx,y)
         out = out[idx, y]  # (batch)
         return out
 
 
 def build_model(args):
-    generator = nn.DataParallel(Generator(args.img_size, args.style_dim, w_hpf=args.w_hpf))
-    mapping_network = nn.DataParallel(MappingNetwork(args.latent_dim, args.style_dim, args.num_domains))
-    style_encoder = nn.DataParallel(StyleEncoder(args.img_size, args.style_dim, args.num_domains))
-    discriminator = nn.DataParallel(Discriminator(args.img_size, args.num_domains))
+    #generator = nn.DataParallel(Generator(args.img_size, args.style_dim, w_hpf=args.w_hpf),device_ids=-1)
+    #mapping_network = nn.DataParallel(MappingNetwork(args.latent_dim, args.style_dim, args.num_domains),device_ids=-1)
+    #style_encoder = nn.DataParallel(StyleEncoder(args.img_size, args.style_dim, args.num_domains),device_ids=-1)
+    #discriminator = nn.DataParallel(Discriminator(args.img_size, args.num_domains),device_ids=-1)
+    generator = Generator(args.img_size, args.style_dim, w_hpf=args.w_hpf)
+    mapping_network = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains)
+    style_encoder = StyleEncoder(args.img_size, args.style_dim, args.num_domains)
+    discriminator = Discriminator(args.img_size, args.num_domains)
     generator_ema = copy.deepcopy(generator)
     mapping_network_ema = copy.deepcopy(mapping_network)
     style_encoder_ema = copy.deepcopy(style_encoder)
@@ -287,10 +290,5 @@ def build_model(args):
                      mapping_network=mapping_network_ema,
                      style_encoder=style_encoder_ema)
 
-    if args.w_hpf > 0:
-        fan = nn.DataParallel(FAN(fname_pretrained=args.wing_path).eval())
-        fan.get_heatmap = fan.module.get_heatmap
-        nets.fan = fan
-        nets_ema.fan = fan
 
-    return nets, nets_ema
+    return nets,nets_ema
