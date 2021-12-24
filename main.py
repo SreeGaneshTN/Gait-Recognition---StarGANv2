@@ -26,16 +26,15 @@ def main(args):
                         val=get_val_loader(root=args.val_img_dir,
                                             img_size=args.img_size,
                                             batch_size=args.val_batch_size,
-                                            shuffle=True,
-                                            num_workers=args.num_workers))
+                                            num_workers=args.num_workers,shuffle=True,))
         solver = Solver(args,loaders)
         solver.Train_network()
     elif args.mode == 'sample':
         loaders = Munch(test=get_test_loader(root=args.src_dir,
                                             img_size=args.img_size,
                                             batch_size=args.val_batch_size,
-                                            shuffle=False,
-                                            num_workers=args.num_workers))
+                                            num_workers=args.num_workers,
+                                            shuffle=False))
         solver = Solver(args,loaders)
         solver.sample()
     else:

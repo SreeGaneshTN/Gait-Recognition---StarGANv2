@@ -45,7 +45,7 @@ class Solver(nn.Module):
                 CheckpointIO(ospj(args.checkpoint_dir, '{:06d}_nets_ema.ckpt'), data_parallel=False, **self.nets_ema),
                 CheckpointIO(ospj(args.checkpoint_dir, '{:06d}_optims.ckpt'), **self.optims)]
         else:
-            self.ckptios = [CheckpointIO(ospj(args.checkpoint_dir, '{:06d}_nets_ema.ckpt'), data_parallel=False, **self.nets_ema)]
+            self.ckptios = [CheckpointIO(ospj(args.checkpoint_dir, '{:06d}_nets.ckpt'), data_parallel=False, **self.nets_ema)]
 
         self.to(self.device)
         for name, network in self.named_children():
@@ -209,33 +209,28 @@ class Solver(nn.Module):
     @torch.no_grad()
     def sample(self):
         os.makedirs(self.args.result_dir, exist_ok=True)
-        self.loadcheckpoint(args.resume_iter)
+        self.loadcheckpoint(self.args.resume_iter)
         self.angles=['000','018','036','054','072','090','108','126','144','162','180']
         self.states=['nm-01','nm-02','nm-03','nm-04','nm-05','nm-06','bg-01','bg-02','cl-01','cl-02']
-        for x_src_img,id,k,j,x_ref_img,y_ref, in enumerate(self.loaders.test):
-            x_src=x_src.to(self.device)
+        for _,(x_src_img,id,k,j,x_ref_img,y_ref) in enumerate(self.loaders.test):
+            x_src=x_src_img.to(self.device)
             x_ref_img=x_ref_img.to(self.device)
             y_ref=y_ref.to(self.device)
             result=ospj(self.args.result_dir,self.angles[y_ref.item()])
             if not os.path.exists(result):
                 os.makedirs(result)
-            id='%03d'% id.item()
-            result_id=ospj(result,id)
-            if not os.path.exists(result_id):
-                os.mkdir(result_id)
+            id=id[0]
             cond=self.states[k.item()]
-            result_cond=ospj(result_id,cond)
-            if not os.path.exists(result_cond):
-                os.mkdir(result_cond)
             angle=self.angles[j.item()]
-            result_ang=ospj(result_cond,angle)
-            if not os.path.exists(result_ang):
-                os.mkdir(result_ang)
-            fname=ospj(result_ang,id+'-'+cond+'-'+angle+'.png')
-            s_trg=self.nets(x_ref_img,y_ref)
+            result=ospj(self.args.result_dir,self.angles[y_ref.item()],id,cond,angle)
+            if not os.path.exists(result):
+                os.makedirs(result)
+            fname=ospj(result,id+'-'+cond+'-'+angle+'.png')
+            s_trg=self.nets.style_encoder(x_ref_img,y_ref)
             x_fake = self.nets.generator(x_src_img, s_trg, masks=None)
             img = utils.denorm(x_fake.data.cpu())
-        save_image(img,fname,nrow=1)
+            save_image(img,fname,nrow=1)
+            print("Image Saved ",id,cond,angle,self.angles[y_ref.item()])
     
 
         

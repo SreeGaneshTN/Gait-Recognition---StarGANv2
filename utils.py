@@ -39,7 +39,7 @@ def he_init(module):
             nn.init.constant_(module.bias, 0)
 
 
-def denormalize(x):
+def denorm(x):
     out = (x + 1) / 2
     return out.clamp_(0, 1)
 

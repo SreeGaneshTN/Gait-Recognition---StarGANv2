@@ -88,6 +88,8 @@ class CasiaTrain(data.Dataset):
             for j in range(0,self.n_angles):
                 id='%03d'% i
                 image_list=glob.glob(os.path.join(self.root,id,'*','*-'+self.angles[j]+'*'))
+                if len(image_list)==0:
+                        continue
                 id_list=[i]*len(image_list)
                 label_list=[j]*len(image_list)
                 data.extend(list(zip(image_list,id_list,label_list)))
@@ -142,6 +144,8 @@ class CasiaVal(data.Dataset):
             for j in range(0,self.n_angles):
                 id='%03d'% i
                 image_list=glob.glob(os.path.join(self.root,id,'*','*-'+self.angles[j]+'*'))
+                if len(image_list)==0:
+                        continue
                 id_list=[i]*len(image_list)
                 label_list=[j]*len(image_list)
                 data.extend(list(zip(image_list,id_list,label_list)))
@@ -197,23 +201,29 @@ class CasiaTest(data.Dataset):
                 for k in range(0,self.n_states):
                     id='%03d'% i
                     image_list=glob.glob(os.path.join(self.root,id,self.states[k],'*-'+self.angles[j]+'*'))
+                    if len(image_list)==0:
+                        continue
                     for l in range(0,self.n_angles):
                         ref_img=glob.glob(os.path.join(self.root,id,self.states[k],'*-'+self.angles[l]+'*'))
-                        data.extend([image_list,id,k,j,ref_img,l])
+                        data.append(list([image_list,id,k,j,ref_img,l]))
         return data
 
     def __getitem__(self,idx):
-        x_src_name=self.dataset[idx][0]
+        #print(self.dataset[idx])
+        x_src_name=self.dataset[idx][0][0]
+        #print(x_src_name)
         id=self.dataset[idx][1]
         img=Image.open(x_src_name).convert('RGB')
+        #print('imagered')
         x_src_img=self.transform(img)
         x_src_cond=torch.tensor(self.dataset[idx][2],dtype=torch.long)
         x_src_angle=torch.tensor(self.dataset[idx][3],dtype=torch.long)
-        x_ref_name=self.dataset[idx][4]
+        x_ref_name=self.dataset[idx][4][0]
         img=Image.open(x_ref_name).convert('RGB')
         x_ref_img=self.transform(img)
-        y_ref=torch.tensor(self.dataset[idx][5],dtype=torch.int)
-        return x_src_img,id,k,j,x_ref_img,y_ref
+        y_ref=torch.tensor(self.dataset[idx][5],dtype=torch.long)
+        #print("Image loaded")
+        return x_src_img,id,x_src_cond,x_src_angle,x_ref_img,y_ref
 
     def __len__(self):
         return len(self.dataset)
