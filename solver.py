@@ -12,15 +12,20 @@ from model import build_model
 from checkpoint import CheckpointIO
 from dataset import InputFetcher
 import utils
+#from torch.utils.tensorboard import SummaryWriter
+from mylog import myLog
+
 
 
 class Solver(nn.Module):
     def __init__(self,args,loader):
         super(Solver,self).__init__()
         self.args=args
-        #self.logger=logger
+        self.logger=myLog(args.log_dir)
+        #self.writer=SummaryWriter('./tensorboard_log/')
         self.loaders=loader
         self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.logger.add_log('Building Model',is_print=True)
         self.nets,self.nets_ema=build_model(args)
         for name, module in self.nets.items():
             utils.print_network(module, name)
@@ -51,7 +56,8 @@ class Solver(nn.Module):
         for name, network in self.named_children():
             # Do not initialize the FAN parameters
             if ('ema' not in name):
-                print('Initializing %s...' % name)
+                self.logger.add_log('Initializing %s...' % name,is_print=True)
+                #print('Initializing %s...' % name)
                 network.apply(utils.he_init)
         self.bce_loss=nn.BCEWithLogitsLoss()
         self.l1_loss=nn.L1Loss()
@@ -153,7 +159,7 @@ class Solver(nn.Module):
         
     # remember the initial value of ds weight
         initial_lambda_ds = self.args.lambda_ds
-        print("Starts Training")
+        self.logger.add_log("Training starts",is_print=True)
         start_time=time.time()
         for i in range(self.args.resume_iter,self.args.total_iters):
             inputs=next(fetcher)
@@ -194,9 +200,21 @@ class Solver(nn.Module):
                 elapsed = time.time() - start_time
                 elapsed = str(datetime.timedelta(seconds=elapsed))[:-7]
                 log = "Elapsed time [%s], Iteration [%i/%i], " % (elapsed, i+1, self.args.total_iters)
-                print("{} Iteration [{}/{}] g_loss_latent: {:.6f}, d_loss_latent: {:.6f}, g_loss_ref: {:.6f}, d_loss_ref: {:.6f},elapse: {} seconds".
+                self.logger.add_log(log,is_print=True)
+                #print("{} Iteration [{}/{}] g_loss_latent: {:.6f}, d_loss_latent: {:.6f}, g_loss_ref: {:.6f}, d_loss_ref: {:.6f},elapse: {} seconds".
+                #                format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, self.args.total_iters,
+                #                    loss['G_loss_latent'],loss['D_loss_latent'],loss['G_loss_reference'],loss['D_loss_reference'],elapsed))
+                self.logger.add_log("{} Iteration [{}/{}] g_loss_latent: {:.6f}, d_loss_latent: {:.6f}, g_loss_ref: {:.6f}, d_loss_ref: {:.6f},elapse: {} seconds".
                                 format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), i, self.args.total_iters,
-                                    loss['G_loss_latent'],loss['D_loss_latent'],loss['G_loss_reference'],loss['D_loss_reference'],elapsed))
+                                    loss['G_loss_latent'],loss['D_loss_latent'],loss['G_loss_reference'],loss['D_loss_reference'],elapsed),is_print=True)
+                #self.writer.add_scalar('Dloss/latent',loss['D_loss_latent'],i)
+                #self.writer.add_scalar('Gloss/latent',loss['G_loss_latent'],i)
+                #self.writer.add_scalar('Dloss/reference',loss['D_loss_reference'],i)
+                #self.writer.add_scalar('Gloss/reference',loss['G_loss_reference'],i)
+                
+
+
+
             if (i+1) % self.args.sample_step == 0:
                 os.makedirs(self.args.sample_dir, exist_ok=True)
                 utils.debug_image(self.nets, self.args, inputs=inputs_val, step=i+1)

@@ -45,7 +45,7 @@ def denorm(x):
 
 
 def save_image(x, ncol, filename):
-    x = denormalize(x)
+    x = denorm(x)
     vutils.save_image(x.cpu(), filename, nrow=ncol, padding=0)
 
 

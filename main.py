@@ -117,12 +117,10 @@ if __name__ == '__main__':
 
 
     # directory for testing
-    parser.add_argument('--result_dir', type=str, default='expr/results',
-                        help='Directory for saving generated images and videos')
-    parser.add_argument('--src_dir', type=str, default='assets/representative/celeba_hq/src',
+    parser.add_argument('--result_dir', type=str, default='./results',
+                        help='Directory for saving generated images ')
+    parser.add_argument('--src_dir', type=str, default='/GEI/',
                         help='Directory containing input source images')
-    parser.add_argument('--ref_dir', type=str, default='assets/representative/celeba_hq/ref',
-                        help='Directory containing input reference images')
 
     # step size
     parser.add_argument('--print_step', type=int, default=10)
