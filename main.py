@@ -55,11 +55,17 @@ if __name__ == '__main__':
                         help='Hidden dimension of mapping network')
     parser.add_argument('--style_dim', type=int, default=64,
                         help='Style code dimension')
+    parser.add_argument('--df_dim', type=int, default=64,
+                        help='Style code dimension')
+    parser.add_argument('--ed_dim', type=int, default=64,
+                        help='Style code dimension')                    
 
     # weight for objective functions
     parser.add_argument('--lambda_reg', type=float, default=1,
                         help='Weight for R1 regularization')
-    parser.add_argument('--lambda_cyc', type=float, default=1,
+    parser.add_argument('--lambda_triplet', type=float, default=10,
+                        help='Weight for Triplet loss'),                    
+    parser.add_argument('--lambda_rec', type=float, default=1,
                         help='Weight for cyclic consistency loss')
     parser.add_argument('--lambda_sty', type=float, default=1,
                         help='Weight for style reconstruction loss')
@@ -91,7 +97,8 @@ if __name__ == '__main__':
                         help='Weight decay for optimizer')
     parser.add_argument('--num_outs_per_domain', type=int, default=10,
                         help='Number of generated images per domain during sampling')
-
+    parser.add_argument('--num_critic', type=int, default=5,
+                        help='Number of Discriminator updates for 1 generator update ')
     # misc
     parser.add_argument('--mode', type=str, required=True,
                         choices=['train', 'sample', 'eval'],

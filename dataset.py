@@ -29,11 +29,11 @@ class InputFetcher:
 
     def _fetch_inputs(self):
         try:
-            x, y,x_ref, x_ref2, y_ref = next(self.iter)
+            x, y,x_ref, x_ref2, y_ref,x_neg = next(self.iter)
         except (AttributeError, StopIteration):
             self.iter = iter(self.loader)
-            x, y,x_ref, x_ref2, y_ref = next(self.iter)
-        return x, y,x_ref, x_ref2, y_ref
+            x, y,x_ref, x_ref2, y_ref,x_neg = next(self.iter)
+        return x, y,x_ref, x_ref2, y_ref,x_neg
 
     def _fetch_refs(self):
         try:
@@ -44,15 +44,15 @@ class InputFetcher:
         return x, x2, y
 
     def __next__(self):
-        x, y,x_ref, x_ref2, y_ref = self._fetch_inputs()
+        x, y,x_ref, x_ref2, y_ref,x_neg = self._fetch_inputs()
         if self.mode == 'train':
             z_trg = torch.randn(x.size(0), self.latent_dim)
             z_trg2 = torch.randn(x.size(0), self.latent_dim)
             inputs = Munch(x_src=x, y_src=y, y_ref=y_ref,
                            x_ref=x_ref, x_ref2=x_ref2,
-                           z_trg=z_trg, z_trg2=z_trg2)
+                           z_trg=z_trg, z_trg2=z_trg2,x_neg=x_neg)
         elif self.mode == 'val':
-            X, Y,x_ref,_, y_ref = self._fetch_inputs()
+            X, Y,x_ref,_, y_ref,_ = self._fetch_inputs()
             inputs = Munch(x_src=X, y_src=Y,
                            x_ref=x_ref, y_ref=y_ref)
         elif self.mode == 'test':
@@ -67,7 +67,7 @@ class InputFetcher:
 class CasiaTrain(data.Dataset):
     def __init__(self,root,image_size,transform=None):
         self.root=root
-        self.subjects=62
+        self.subjects=63
         self.angles=['000','018','036','054','072','090','108','126','144','162','180']
         self.states=['nm-01','nm-02','nm-03','nm-04','nm-05','nm-06','bg-01','bg-02','cl-01','cl-02']
         self.n_angles=len(self.angles)
@@ -103,6 +103,7 @@ class CasiaTrain(data.Dataset):
         x_src_img=self.transform(img)
         while True:
             x_ref1,x_ref2=random.sample(self.dataset_ref[id],2)
+            
             if x_ref1[0]==x_src_name or x_ref2[0]==x_src_name:
                 continue
             if not x_ref1[1]==x_ref2[1]:
@@ -112,10 +113,21 @@ class CasiaTrain(data.Dataset):
         x_ref1_img=Image.open(x_ref1[0]).convert('RGB')
         x_ref2_img=Image.open(x_ref2[0]).convert('RGB')
         label=torch.tensor(x_ref1[1],dtype=torch.long)
-        #print(x_src_name,x_src_label,x_ref1[0],x_ref2[0],label)
+        while True:
+            x_neg_id=np.random.randint(0,self.subjects,size=1).item()+1
+            if x_neg_id==id:
+                continue
+            x_neg=random.sample(self.dataset_ref[x_neg_id],1)
+            #print(x_neg)
+            if not x_neg[0][1]==label:
+                continue
+            break
+        x_neg_img=Image.open(x_neg[0][0]).convert('RGB')
         x_ref1_img=self.transform(x_ref1_img)
         x_ref2_img=self.transform(x_ref2_img)
-        return x_src_img,x_src_label,x_ref1_img,x_ref2_img,label
+        x_neg_img=self.transform(x_neg_img)
+        
+        return x_src_img,x_src_label,x_ref1_img,x_ref2_img,label,x_neg_img
 
     def __len__(self):
         return len(self.dataset)
@@ -168,10 +180,9 @@ class CasiaVal(data.Dataset):
         x_ref1_img=Image.open(x_ref1[0]).convert('RGB')
         x_ref2_img=Image.open(x_ref2[0]).convert('RGB')
         label=torch.tensor(x_ref1[1],dtype=torch.long)
-        #print(x_src_name,x_src_label,x_ref1[0],x_ref2[0],label)
         x_ref1_img=self.transform(x_ref1_img)
         x_ref2_img=self.transform(x_ref2_img)
-        return x_src_img,x_src_label,x_ref1_img,x_ref2_img,label
+        return x_src_img,x_src_label,x_ref1_img,x_ref2_img,label,label
 
     def __len__(self):
         return 50
@@ -250,5 +261,5 @@ def get_test_loader(root,img_size,batch_size,num_workers,shuffle=False):
 casia=CasiaTrain('/mnt/sda2/intern/GEI',64)
 
 #print(casia.dataset_ref[1])
-loader=data.DataLoader(casia,batch_size=2)
-a,b,c,d,e=next(iter(loader))
+#loader=data.DataLoader(casia,batch_size=2)
+#a,b,c,d,e=next(iter(loader))

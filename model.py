@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import torchvision
 
 class ResBlk(nn.Module):
     def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2),
@@ -268,6 +268,44 @@ class Discriminator(nn.Module):
         out = out[idx, y]  # (batch)
         return out
 
+class SiaNet(nn.Module):
+    def __init__(self, df_dim=64, ed_dim=64):
+        super(SiaNet, self).__init__()
+        layers = []
+        layers.append(nn.Conv2d(3, df_dim, kernel_size=4, stride=2, padding=1))
+        layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        curr_dim = df_dim
+        for i in range(1, 4):
+            layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1))
+            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+            curr_dim = curr_dim * 2
+        self.linear = nn.Linear(curr_dim, out_features=ed_dim, bias=None)
+        self.embedding = nn.Sequential(*layers)
+
+    def forward(self, x):
+        features =  self.embedding(x)
+        return self.linear(features.squeeze())
+
+class Imagenet(nn.Module):
+    def __init__(self,model='alexnet',feature_dim=64):
+        super(Imagenet,self).__init__()
+        if model=='alexnet':
+            self.base=torchvision.models.alexnet(pretrained=True)
+            self.base.classifier[-1].out_features=feature_dim
+        elif model=='vgg16':
+            self.base=torchvision.models.vgg16_bn(pretrained=True)
+            self.base.classifier[-1].out_features=feature_dim
+        else:
+            self.base=torchvision.models.resnet18(pretrained=True)
+            self.base.fc.out_features=feature_dim
+        self.freeze(requires_grad=True)
+    def forward(self,x):
+        features = self.base(x)
+        return features
+    
+    def freeze(self,requires_grad=True):
+        for param in self.base.features.parameters():
+            param.requires_grad = requires_grad
 
 def build_model(args):
     #generator = nn.DataParallel(Generator(args.img_size, args.style_dim, w_hpf=args.w_hpf),device_ids=-1)
@@ -278,6 +316,7 @@ def build_model(args):
     mapping_network = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains)
     style_encoder = StyleEncoder(args.img_size, args.style_dim, args.num_domains)
     discriminator = Discriminator(args.img_size, args.num_domains)
+    Sianet=SiaNet(args.df_dim,args.ed_dim)
     generator_ema = copy.deepcopy(generator)
     mapping_network_ema = copy.deepcopy(mapping_network)
     style_encoder_ema = copy.deepcopy(style_encoder)
@@ -285,7 +324,8 @@ def build_model(args):
     nets = Munch(generator=generator,
                  mapping_network=mapping_network,
                  style_encoder=style_encoder,
-                 discriminator=discriminator)
+                 discriminator=discriminator,
+                 sianet=Sianet)
     nets_ema = Munch(generator=generator_ema,
                      mapping_network=mapping_network_ema,
                      style_encoder=style_encoder_ema)

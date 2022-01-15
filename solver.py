@@ -14,7 +14,7 @@ from dataset import InputFetcher
 import utils
 #from torch.utils.tensorboard import SummaryWriter
 from mylog import myLog
-
+from torch.nn import functional as F
 
 
 class Solver(nn.Module):
@@ -61,6 +61,7 @@ class Solver(nn.Module):
                 network.apply(utils.he_init)
         self.bce_loss=nn.BCEWithLogitsLoss()
         self.l1_loss=nn.L1Loss()
+        self.triplet_loss=nn.TripletMarginLoss(margin=0.8,p=2)
 
     def savecheckpoint(self,step):
         for ckpt in self.ckptios:
@@ -77,7 +78,7 @@ class Solver(nn.Module):
     def r1_reg(self,d_out, x_in):
     # zro-centered gradient penalty for real images
         batch_size = x_in.size(0)
-        x_in.requires_grad_()
+        #x_in.requires_grad_()
         grad_dout = torch.autograd.grad(
             outputs=d_out.sum(), inputs=x_in,
             create_graph=True, retain_graph=True, only_inputs=True
@@ -98,12 +99,30 @@ class Solver(nn.Module):
         self.s_trg_enc=self.nets.style_encoder(x_ref,y_trg)
         self.s_trg2_enc=self.nets.style_encoder(x_ref2,y_trg)
 
+    def BackwardSiamese(self,x_src,x_ref,y_target,pos,neg,generator=False):
+        if generator:
+            s_trg=self.nets.style_encoder(x_ref,y_target)
+            self.forward_G(x_src,s_trg)
+            anc_embedding = self.sianet(self.x_fake.detach())
+        else:
+            anc_embedding = self.sianet(x_ref.detach())
+        neg_embedding = self.sianet(neg.detach())
+        pos_embedding = self.sianet(pos.detach())
+
+        self.id_embedding = F.normalize(anc_embedding, p=2)
+        #id_anc_embedding = F.normalize(anc_embedding, p=2)
+        self.id_neg_embedding = F.normalize(neg_embedding, p=2)
+        self.id_pos_embedding = F.normalize(pos_embedding, p=2)
+
+        self.id_triplet_loss = self.triplet_loss(self.id_embedding, self.id_pos_embedding, self.id_neg_embedding)
+
     def Backward_D(self,x_src,y_org,y_target,z_target=None,x_ref=None):
         assert (z_target is None) != (x_ref is None)
         #print('forward_pass_real_discriminator')
+        x_src.requires_grad_()
         out=self.nets.discriminator(x_src,y_org)
         self.d_real_loss=self.bce_loss(out,torch.ones_like(out))
-        #self.d_r1_reg=self.r1_reg(out,x_src)
+        self.d_r1_reg=self.r1_reg(out,x_src)
         if z_target is not None:
             s_trg=self.nets.mapping_network(z_target,y_target)
             self.forward_G(x_src,s_trg)
@@ -114,7 +133,7 @@ class Solver(nn.Module):
         #print('forward_pass_fake_discriminator')
         out=self.nets.discriminator(self.x_fake.detach(),y_target)
         self.d_fake_loss=self.bce_loss(out,torch.zeros_like(out))
-        self.d_loss=self.d_real_loss+self.d_fake_loss
+        self.d_loss=self.d_real_loss+self.d_fake_loss+self.args.lambda_reg*self.d_r1_reg
         
     def Backward_G(self,x_src,y_org,y_target,z_targets=None,x_refs=None):
         assert (z_targets is None) != (x_refs is None)
@@ -123,7 +142,7 @@ class Solver(nn.Module):
             s_trg=self.nets.mapping_network(z_target,y_target)
             s_trg2=self.nets.mapping_network(z_target2,y_target)
         if x_refs is not None:
-            x_ref,x_ref2=x_refs
+            x_ref,x_ref2,x_neg=x_refs
             s_trg=self.nets.style_encoder(x_ref,y_target)
             s_trg2=self.nets.style_encoder(x_ref2,y_target)
         #print('generative loss')
@@ -135,15 +154,17 @@ class Solver(nn.Module):
         s_pred = self.nets.style_encoder(self.x_fake, y_target)
         self.style_loss = self.l1_loss(s_trg,s_pred)
         # diversity sensitive loss
-        #print('ds loss')
+
         x_fake2=self.nets.generator(x_src,s_trg2,masks=None).detach()
         self.ds_loss = self.l1_loss(x_fake2,self.x_fake)
-        # cycle-consistency loss
-        #print('cycle loss')
-        s_org = self.nets.style_encoder(x_src,y_org)
-        x_rec = self.nets.generator(self.x_fake, s_org, masks=None).detach()
-        self.cycle_loss = self.l1_loss(x_src,x_rec)
-        self.g_loss = self.g_adv_loss + self.args.lambda_sty * self.style_loss -self.args.lambda_ds * self.ds_loss + self.args.lambda_cyc * self.cycle_loss
+        # ID loss
+        self.rec_loss = self.l1_loss(x_src,self.x_fake)
+        self.g_loss = self.g_adv_loss + self.args.lambda_sty * self.style_loss -self.args.lambda_ds * self.ds_loss + self.args.lambda_rec * self.rec_loss 
+        if x_refs is not None:
+            self.BackwardSiamese(x_src,x_ref,y_target,x_ref2,x_neg,generator=True)
+            self.g_loss+= self.args.lambda_triplet*self.id_triplet_loss
+
+        
         
     def moving_average(self,nets,nets_ema,beta):
         for param, param_test in zip(nets.parameters(), nets_ema.parameters()):
@@ -164,7 +185,7 @@ class Solver(nn.Module):
         for i in range(self.args.resume_iter,self.args.total_iters):
             inputs=next(fetcher)
             x_src,y_org=inputs.x_src,inputs.y_src
-            x_ref,x_ref2,y_target=inputs.x_ref,inputs.x_ref2,inputs.y_ref
+            x_ref,x_ref2,y_target,x_neg=inputs.x_ref,inputs.x_ref2,inputs.y_ref,inputs.x_neg
             z_trg,z_trg2=inputs.z_trg,inputs.z_trg2
             #self.forward_mapping_network(z_trg,z_trg2,y_target)
             #self.encode_style(x_ref,x_ref2,y_target)
@@ -179,19 +200,27 @@ class Solver(nn.Module):
             self.d_loss.backward()
             self.optims.discriminator.step()
             loss['D_loss_reference']=self.d_loss.item()
-            self.Backward_G(x_src,y_org,y_target,z_targets=[z_trg,z_trg2])
+            self.BackwardSiamese(x_src,x_ref,y_target,pos=x_ref2,neg=x_neg)
             self._reset_grad()
-            self.g_loss.backward()
-            self.optims.generator.step()
-            self.optims.mapping_network.step()
-            self.optims.style_encoder.step()
-            loss['G_loss_latent']=self.g_loss.item()
-            self.Backward_G(x_src,y_org,y_target,None,x_refs=[x_ref,x_ref2])
-            self._reset_grad()
-            self.g_loss.backward()
-            self.optims.generator.step()
-            loss['G_loss_reference']=self.g_loss.item()
-            loss['style_loss']=self.style_loss.item()
+            self.id_triplet_loss.backward()
+            self.optims.sianet.step()
+            loss['id_loss']=self.id_triplet_loss.item()
+
+
+            if (i+1) % self.args.num_critic==0:
+                self.Backward_G(x_src,y_org,y_target,z_targets=[z_trg,z_trg2])
+                self._reset_grad()
+                self.g_loss.backward()
+                self.optims.generator.step()
+                self.optims.mapping_network.step()
+                self.optims.style_encoder.step()
+                loss['G_loss_latent']=self.g_loss.item()
+                self.Backward_G(x_src,y_org,y_target,None,x_refs=[x_ref,x_ref2,x_neg])
+                self._reset_grad()
+                self.g_loss.backward()
+                self.optims.generator.step()
+                loss['G_loss_reference']=self.g_loss.item()
+                loss['style_loss']=self.style_loss.item()
             
             #self.moving_average(self.nets.generator, self.nets_ema.generator, beta=0.999)
             #self.moving_average(self.nets.mapping_network, self.nets_ema.mapping_network, beta=0.999)
